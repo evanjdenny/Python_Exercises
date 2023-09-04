@@ -31,8 +31,47 @@ class Circle:
 from enum import Enum
 from random import randint
 
+class WeaponType(Enum):
+    SHORT_BLADE = 0
+    LONG_BLADE = 1
+    BLUNT_MELEE = 2
+    BOW = 3
+    CROSSBOW = 4
+    GUN = 5
+
+class WeaponLevel(Enum):
+    ONE = 1
+    TWO = 2
+    THREE = 3
+    FOUR = 4
+    FIVE = 5
+
+class Level:
+    """Levels and experience."""
+    def __init__(self):
+        self.current_level = 1
+        self.current_experience = 0
+        self.experience = {
+            1: 0,
+            2: 240,
+            3: 720,
+            4: 2160,
+            5: 6480
+        }
+
+    def add_exp(self, exp: int):
+        """Add experience to Level.current_experience."""
+        self.current_experience += exp
+
+    def check_level(self):
+        """Check if your experience is high enough to progress to
+        the next level."""
+        if self.current_experience >= self.experience[self.current_level + 1]:
+            self.current_level += 1
+            print('You leveled up! You are now level', self.current_level)
+
 class Weapon:
-    def __init__(self, name: str, weapon_type, level: int, min_dmg: int, max_dmg: int, equipable_classes: list):
+    def __init__(self, name: str, weapon_type: WeaponType, level: WeaponLevel, min_dmg: int, max_dmg: int, equipable_classes: list):
         self.name = name
         self.weapon_type = weapon_type
         self.level = level
@@ -56,7 +95,8 @@ class Player:
     def __init__(self, name, _class: PlayerClass):
         self.name = name
         self.player_class = _class
-        self.level = 1
+        self.level = Level()
+        self.experience_to_next_level = self.level.experience[self.level.current_level+1]
         self.health = 100
         self.mana = 100
         self.dodge_chance = 40
@@ -83,6 +123,7 @@ class Player:
         del inventory_spaces
 
     def view_inventory(self):
+        """Print inventory to the screen in a easy-to-view way."""
         print(self.inventory[0:5])
         print(self.inventory[5:10])
         print(self.inventory[10:15])
@@ -90,7 +131,20 @@ class Player:
         print(self.inventory[20:25])
         print(self.inventory[25:30])
 
-    def __check_alive(self):
+    def __calc_exp_to_next_lvl(self):
+        self.experience_to_next_level = self.level.experience[self.level.current_level+1]-self.level.current_experience
+
+    def print_current_level(self):
+        """Prints player's current level and the amount of experience until the next level."""
+        print(self.name,'is currently level',str(self.level.current_level)+'.')
+        print(self.experience_to_next_level,'experience to level',self.level.current_level+1)
+
+    def check_level_up(self):
+        """Check if player has enough experience to progress to the next level."""
+        self.level.check_level()
+
+    def check_alive(self):
+        """Check if player is alive or not."""
         if self.health > 0:
             self.alive = True
         elif self.health <= 0:
@@ -124,6 +178,9 @@ class Player:
     
     def __check_kill(self, target):
         if target.health <= 0:
+            print(self.name,'killed',target.name+'.')
+            self.level.add_exp(target.experience)
+            self.__calc_exp_to_next_lvl()
             for item in target.inventory:
                 if item != '':
                     self.add_inventory_item(item)
@@ -133,50 +190,66 @@ class Player:
                         # the player to pick up from when standing on the tile.
 
     def attack(self, target):
-        if randint(0,100) > 10:
+        """Attack a target using the player's weapon."""
+        if randint(0,100) > 25:
             target.health -= self.equipment['Weapon'].damage_attack()
             print(self.name,'dealt',str(self.equipment['Weapon'].last_damage),'damage to',target.name+'.')
         else:
             print(self.name,'missed',target.name+'!')
+        self.__check_kill(target)
     
     def equip_weapon(self, weapon: Weapon):
+        """Equip a weapon to the player."""
         self.equipment['Weapon'] = weapon
 
 class Monster:
-    def __init__(self, name, monster_type, health, weapon: Weapon, hit_chance):
+    """Monsters that give experience to the player upon being killed."""
+    def __init__(self, name, monster_type, health, weapon: Weapon, hit_chance, experience):
         self.name = name
         self.monster_type = monster_type
         self.health = health
+        self.alive = True
         self.weapon = weapon
         self.hit_chance = hit_chance
         self.inventory = []
+        self.experience = experience
+
+    def check_alive(self):
+        if self.health > 0:
+            self.alive = True
+        else:
+            self.alive = False
 
     def attack(self, target: Player):
         """Attack player."""
-        if randint(0,100)*self.hit_chance > target.dodge_chance:
-            target.health -= self.weapon.damage_attack()
-            print(self.name,'dealt',str(self.weapon.last_damage),'damage to',target.name+'.')
-        else:
-            print(self.name,'missed',target.name+'!')
+        self.check_alive()
+        if self.alive:
+            if randint(0,100)*self.hit_chance > target.dodge_chance:
+                target.health -= self.weapon.damage_attack()
+                print(self.name,'dealt',str(self.weapon.last_damage),'damage to',target.name+'.')
+            else:
+                print(self.name,'missed',target.name+'!')
+            target.check_alive()
 
 evan = Player('Evan Denny', PlayerClass.WARRIOR)
-goblin_club = Weapon('Goblin Club', 'Blunt', 1, 2, 5, [PlayerClass.WARRIOR, PlayerClass.RANGER])
-goblin = Monster('Goblin', 'Creature', 20, goblin_club, 0.65)
-sword = Weapon('Sword', 'Blade', 1, 5, 10, [PlayerClass.WARRIOR, PlayerClass.RANGER])
+goblin_club = Weapon('Goblin Club', WeaponType.BLUNT_MELEE, WeaponLevel.ONE, 2, 5, [PlayerClass.WARRIOR, PlayerClass.RANGER])
+goblin = Monster('Goblin', 'Creature', 20, goblin_club, 0.90, 5)
+sword = Weapon('Sword', WeaponType.BLUNT_MELEE, WeaponLevel.ONE, 5, 10, [PlayerClass.WARRIOR, PlayerClass.RANGER])
 evan.equipment['Weapon'] = sword
-goblin2 = Monster('Goblin', 'Creature', 20, goblin_club, 0.65)
+goblin2 = Monster('Goblin', 'Creature', 20, goblin_club, 0.90, 5)
 
-while evan.alive:
+while evan.alive and (goblin.health>0 or goblin2.health>0):
     if goblin.health <= 0:
-        del goblin
+        pass
     else:
+        goblin.attack(evan)
         evan.attack(goblin)
     if goblin2.health <= 0:
-        del goblin2
+        pass
     else:
+        goblin2.attack(evan)
         evan.attack(goblin2)
-    goblin.attack(evan)
-    goblin2.attack(evan)
     print(evan.health, goblin.health, goblin2.health)
 if not evan.alive:
-    print('Evan died.')
+    print(evan.name,'died.')
+evan.print_current_level()
